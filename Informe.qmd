@@ -1,0 +1,164 @@
+---
+title: "Informe"
+format: pdf
+editor: visual
+---
+
+
+```{r}
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(Pareto)
+options(scipen = 999)
+cuantias_2023 <- read_excel("Datos/Datos.xlsx") |> 
+  mutate(Cuantia_ajustada = Cuantia_ajustada/1000)
+
+Registro <- tibble(
+  anio = c(2021,2022,2023),
+  polizas = c(24725, 25348 , 25615),
+  siniestros = c(3023, 3581, nrow(cuantias_2023))
+) |> 
+  mutate(SinXpoliza = siniestros/polizas)
+
+View(cuantias_2023)
+```
+
+
+
+```{r}
+# Descriptivo
+cuantias_2023 |> 
+  ggplot()+
+  aes(x = Cuantia_ajustada)+
+  geom_density()
+```
+
+
+```{r}
+knitr::kable(Registro)
+
+
+```
+
+
+```{r}
+
+lambda <- Registro$SinXpoliza[3]
+
+Probabilidades <- tibble(
+  N = 0:5
+) |> 
+  mutate(
+    Prob = round(dpois(N,lambda),5)
+  )
+
+
+Prior_lambda <- rgamma(5000, shape = 216.74, scale = 1/1635.8)
+data.frame(Prior_lambda) |> 
+  ggplot()+
+  aes(x = Prior_lambda)+
+  geom_density()
+
+
+
+```
+
+
+
+```{r}
+XL <- as.numeric(quantile(x = cuantias_2023$Cuantia_ajustada,prob = 0.95))
+cuantias_2023 <- cuantias_2023 |> 
+  mutate(Marginal = ifelse(Cuantia_ajustada < quantile(x = Cuantia_ajustada,prob = 0.95), T,F),
+         Cuanti_cat = cut(Cuantia_ajustada,breaks = c(seq(0,XL,length.out = 50))))
+
+
+cuantias_2023 |> 
+  filter(Marginal) |> 
+  ggplot()+
+  aes(x = Cuanti_cat)+
+  geom_bar()
+
+Marginal <- table(cuantias_2023$Cuanti_cat) |> 
+  as.data.frame() |> tibble() |> na.exclude() |> 
+  mutate(prob = Freq/sum(Freq))
+
+Marginal$Dist <- Marginal$prob
+
+for (i in 2:nrow(Marginal)) {
+  Marginal[i,4] <- Marginal[i-1,4] + Marginal[i,3]
+}
+
+mu_2 <- mean(cuantias_2023$Cuantia_ajustada[!cuantias_2023$Marginal])
+
+
+
+pPareto(XL, t = alpha, alpha = beta)
+
+rPareto(n = 100,t = alpha, alpha = beta)
+
+Sacar_muestra <- function(n, Marginal, XL, mu_2){
+  beta <- mu_2/(mu_2-0.05*XL)
+  
+  alpha <- XL * 0.05^(1/beta)
+  
+  Salida <- numeric(n)
+  
+  for (i in 1:n) {
+    Selec <- runif(1)
+    if(Selec<0.95){
+      Inversa <- runif(1)
+      Temp <- Marginal |> filter(Dist <= Inversa)
+      Salida[i] <- as.numeric(str_split(str_remove(str_remove(Marginal$Var1[nrow(Temp)], "]"), "[()]"),",")[[1]][2])
+    }else{
+      while (Salida[i]<XL || Salida[i]>6000) {
+        Salida[i] <- rPareto(n = 1,t = alpha, alpha = beta)
+
+      }
+    }
+  }
+  
+  return(Salida)
+}
+
+Muestra_cuantia <- Sacar_muestra(n = 10000,Marginal = Marginal, XL = XL,mu_2 = mu_2)
+
+Muestra_cuantia |> 
+  tibble() |> 
+  # filter(Muestra_cuantia<XL) |> 
+  ggplot()+
+  aes(x = Muestra_cuantia)+
+  geom_density()  
+
+# Parámetro paretto
+
+mu_2 <- mean(cuantias_2023$Cuantia_ajustada[!cuantias_2023$Marginal])
+
+beta <- mu_2/(mu_2-0.05*XL)
+alpha <- XL * 0.05^(1/beta)
+
+pPareto(XL, t = alpha, alpha = beta)
+
+rPareto(n = 100,t = alpha, alpha = beta)
+
+table(cuantias_2023$Cuantia_ajustada)
+
+cut_interval(x = cuantias_2023$Cuantia_ajustada[cuantias_2023$Marginal == T],
+             length = 5000)
+
+
+
+sum(Probs)
+mean(cuantias_2023$Cuantia_ajustada)
+
+# Posibles distribuciones 
+
+
+
+
+
+
+```
+
