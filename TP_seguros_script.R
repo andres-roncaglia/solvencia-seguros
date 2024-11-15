@@ -3,13 +3,25 @@ library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(lubridate)
-options(scipen = 999999999999999)
+options(scipen = 999)
 cuantias_2023 <- read_excel("Datos/Datos.xlsx") |> 
   mutate(Marginal = ifelse(Cuantia_ajustada < 900000, T,F),
          Cuantia_cat = cut(Cuantia_ajustada, breaks = c(seq(0,900000,25000),Inf)))
+         Cuantia_ajustada = Cuantia_ajustada/1000)
+
 View(cuantias_2023)
 
-class(cuantias_2023$Cuantia_ajustada)
+Registro <- tibble(
+  anio = c(2021,2022,2023),
+  polizas = c(24725, 25348 , 25615),
+  siniestros = c(3023, 3581, nrow(cuantias_2023))
+) |> 
+  mutate(SinXpoliza = siniestros/polizas)
+
+lambda <- Registro$SinXpoliza[3]
+
+
+
 
 table(cuantias_2023$Cuantia_cat) |> 
   prop.table() |> 
@@ -25,7 +37,11 @@ cuantias_2023 |>
   aes(x = (Cuantia_ajustada))+
   geom_density()
 
-cut()
+
+
+
+
+
 
 table()
 mean(log(cuantias_2023$Cuantia_ajustada))
