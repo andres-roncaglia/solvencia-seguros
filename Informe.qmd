@@ -1,9 +1,7 @@
 ---
 title: "Informe"
 format: pdf
-editor: visual
 ---
-
 
 ```{r}
 library(readxl)
@@ -12,6 +10,8 @@ library(dplyr)
 library(ggplot2)
 library(lubridate)
 library(Pareto)
+library(stringr)
+
 options(scipen = 999)
 cuantias_2023 <- read_excel("Datos/Datos.xlsx") |> 
   mutate(Cuantia_ajustada = Cuantia_ajustada/1000)
@@ -23,10 +23,8 @@ Registro <- tibble(
 ) |> 
   mutate(SinXpoliza = siniestros/polizas)
 
-View(cuantias_2023)
+
 ```
-
-
 
 ```{r}
 # Descriptivo
@@ -36,50 +34,32 @@ cuantias_2023 |>
   geom_density()
 ```
 
-
 ```{r}
 knitr::kable(Registro)
 
-
 ```
 
+# Distribuciones para la cuantia de los siniestros
+
+## Metodo 1: Empirica + Pareto I (acotada hasta 10k) 
 
 ```{r}
+## Punto de corte
 
-lambda <- Registro$SinXpoliza[3]
-
-Probabilidades <- tibble(
-  N = 0:5
-) |> 
-  mutate(
-    Prob = round(dpois(N,lambda),5)
-  )
-
-
-Prior_lambda <- rgamma(5000, shape = 216.74, scale = 1/1635.8)
-data.frame(Prior_lambda) |> 
-  ggplot()+
-  aes(x = Prior_lambda)+
-  geom_density()
-
-
-
-```
-
-
-
-```{r}
 XL <- as.numeric(quantile(x = cuantias_2023$Cuantia_ajustada,prob = 0.95))
 cuantias_2023 <- cuantias_2023 |> 
   mutate(Marginal = ifelse(Cuantia_ajustada < quantile(x = Cuantia_ajustada,prob = 0.95), T,F),
          Cuanti_cat = cut(Cuantia_ajustada,breaks = c(seq(0,XL,length.out = 50))))
 
+## Distribucion hasta el punto de corte
 
 cuantias_2023 |> 
   filter(Marginal) |> 
   ggplot()+
-  aes(x = Cuanti_cat)+
-  geom_bar()
+  aes(x = Cuantia_ajustada)+
+  geom_density()
+
+## Intervalos para el metodo de la grilla
 
 Marginal <- table(cuantias_2023$Cuanti_cat) |> 
   as.data.frame() |> tibble() |> na.exclude() |> 
@@ -91,29 +71,41 @@ for (i in 2:nrow(Marginal)) {
   Marginal[i,4] <- Marginal[i-1,4] + Marginal[i,3]
 }
 
+## Esperanza de la distribucion despues del punto de corte
+
 mu_2 <- mean(cuantias_2023$Cuantia_ajustada[!cuantias_2023$Marginal])
 
 
-
-pPareto(XL, t = alpha, alpha = beta)
-
-rPareto(n = 100,t = alpha, alpha = beta)
+## Funcion para sacar muestra de la distribucion conjunta Empirica-Pareto
 
 Sacar_muestra <- function(n, Marginal, XL, mu_2){
-  beta <- mu_2/(mu_2-0.05*XL)
   
+  # Parametros para pareto 1 
+  beta <- mu_2/(mu_2-0.05*XL)
   alpha <- XL * 0.05^(1/beta)
   
+  # Vector de salida
   Salida <- numeric(n)
   
   for (i in 1:n) {
     Selec <- runif(1)
     if(Selec<0.95){
+      # Si el valor random cae en el 95% de la distribucion selecciona un valor de la distribucion empirica mediante el metodo de la grilla
+      
       Inversa <- runif(1)
       Temp <- Marginal |> filter(Dist <= Inversa)
-      Salida[i] <- as.numeric(str_split(str_remove(str_remove(Marginal$Var1[nrow(Temp)], "]"), "[()]"),",")[[1]][2])
+      
+      # Seleccionamos un valor random entre el minimo y el maximo del intervalo
+      
+      minimo <- as.numeric(str_split(str_remove(str_remove(Marginal$Var1[nrow(Temp)], "]"), "[()]"),",")[[1]][1])
+      maximo <- as.numeric(str_split(str_remove(str_remove(Marginal$Var1[nrow(Temp)], "]"), "[()]"),",")[[1]][2])
+      
+      Salida[i] <- runif(n = 1, min = minimo, max = maximo)
+      
     }else{
-      while (Salida[i]<XL || Salida[i]>6000) {
+      # Si el valor random cae en el 5% de la cola derecha selecciona un valor de la pareto 1
+      
+      while (Salida[i]<XL || Salida[i]>10000) {
         Salida[i] <- rPareto(n = 1,t = alpha, alpha = beta)
 
       }
@@ -122,6 +114,8 @@ Sacar_muestra <- function(n, Marginal, XL, mu_2){
   
   return(Salida)
 }
+
+## Obtencion y grafico de la muestra
 
 Muestra_cuantia <- Sacar_muestra(n = 10000,Marginal = Marginal, XL = XL,mu_2 = mu_2)
 
@@ -132,33 +126,133 @@ Muestra_cuantia |>
   aes(x = Muestra_cuantia)+
   geom_density()  
 
-# Parámetro paretto
 
-mu_2 <- mean(cuantias_2023$Cuantia_ajustada[!cuantias_2023$Marginal])
+# Agragar: elegir numero random entre el intervalo seleccionado
 
-beta <- mu_2/(mu_2-0.05*XL)
-alpha <- XL * 0.05^(1/beta)
+```
 
-pPareto(XL, t = alpha, alpha = beta)
+## Metodo 2: Lognormal
 
-rPareto(n = 100,t = alpha, alpha = beta)
+```{r}
 
-table(cuantias_2023$Cuantia_ajustada)
+## Calculamos los parámetros de la distribucion lognormal
 
-cut_interval(x = cuantias_2023$Cuantia_ajustada[cuantias_2023$Marginal == T],
-             length = 5000)
+m1 <- mean(cuantias_2023$Cuantia_ajustada)
+var <- var(cuantias_2023$Cuantia_ajustada)
+m2 <- var + m1^2
+
+R <- m2/m1^2
+
+mu <- log(m1) - 0.5 * log(R)
+sigma2 <- log(R)
+
+## Aplicamos la transformacion lognormal
+
+lognormal <- rlnorm(10000, meanlog = mu, sdlog = sqrt(sigma2))
+
+lognormal |> 
+  data.frame() |> 
+  ggplot()+
+  aes(x = lognormal)+
+  geom_density()
 
 
+```
 
-sum(Probs)
-mean(cuantias_2023$Cuantia_ajustada)
+## Metodo 3: Weibull + pareto 1
 
-# Posibles distribuciones 
+```{r}
+## Funcion para sacar muestra de la distribucion conjunta Weibull-Pareto
 
+Sacar_muestra_wp <- function(n, XL, mu_2, datos){
+  
+  # Parametros para pareto 1
+  beta <- mu_2/(mu_2-0.05*XL)
+  alpha <- XL * 0.05^(1/beta)
+  
+  # Parametros para Weibull
+  alphaw <- ExtDist::eWeibull(X = cuantias_2023$Cuantia_ajustada, method = "moments")$shape
+  betaw <- ExtDist::eWeibull(X = cuantias_2023$Cuantia_ajustada, method = "moments")$scale
+  
+  Salida <- numeric(n)
+  
+  for (i in 1:n) {
+    Selec <- runif(1)
+    if(Selec<0.95){
+      # Si el valor random cae en el 95% de la distribucion selecciona un valor de la weibull
+      
+      Salida[i] <- rweibull(n = 1, shape = alphaw, scale = betaw)
+      
+    }else{
+      # Si el valor random cae en el 5% de la cola derecha selecciona un valor de la pareto 1
+      
+      while (Salida[i]<XL || Salida[i]>10000) {
+        Salida[i] <- rPareto(n = 1,t = alpha, alpha = beta)
 
+      }
+    }
+  }
+  
+  return(Salida)
+}
 
+Muestra_cuantia <- Sacar_muestra_wp(n = 10000, XL = XL,mu_2 = mu_2, datos = cuantias_2023$Cuantia_ajustada)
 
+Muestra_cuantia |> 
+  tibble() |> 
+  ggplot() +
+  aes(x = Muestra_cuantia)+
+  geom_density()
+```
 
+# Distribuciones para el numero de siniestros por poliza
 
+## Poisson
+
+Tomamos como parametro lambda la media de lambda en los años anteriores
+
+```{r}
+
+media_lambda <- mean(Registro$SinXpoliza)
+
+dist_pois <- data.frame(n = 0:3,
+                        prob = dpois(0:3, lambda = media_lambda))
+
+dist_pois |> 
+  ggplot() + 
+  aes(x = n, y = prob) +
+  geom_col()
+
+```
+
+# Simulacion de la cartera
+
+Asumimos en 2024 hubo 25615 polizas al igual que en 2023
+
+## Weibull-pareto
+
+```{r}
+n_polizas <- 25615
+k <- 1000
+
+cuantia_total <- numeric(k)
+for (i in 1:k) {
+  
+  # Obtenemos el numero total de siniestros para toda la cartera
+  siniestros <- sum(rpois(n = n_polizas, lambda = media_lambda))
+  
+  # Obtenemos un valor de la cuantia total
+  cuantia_total[i] <- sum(Sacar_muestra_wp(n = siniestros, XL = XL, mu_2 = mu_2, datos = cuantias_2023$Cuantia_ajustada))
+  
+  cat("Progreso:", round(i/k*100, digits = 2), "% \n")
+}
+
+prima_pura <- mean(cuantia_total)
+
+cuantil_0.01 <- quantile(cuantia_total, probs = 0.99)
+
+margen_solvencia_minimo <- as.numeric(cuantil_0.01 - prima_pura)
+
+hist(cuantia_total)
 ```
 

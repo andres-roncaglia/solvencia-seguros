@@ -4,6 +4,7 @@ library(dplyr)
 library(ggplot2)
 library(lubridate)
 options(scipen = 999)
+
 cuantias_2023 <- read_excel("Datos/Datos.xlsx") |> 
   mutate(Marginal = ifelse(Cuantia_ajustada < 900000, T,F),
          Cuantia_cat = cut(Cuantia_ajustada, breaks = c(seq(0,900000,25000),Inf)))
