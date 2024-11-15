@@ -56,7 +56,7 @@ data.frame(vec,dens) |>
   ggplot()+
   aes(x=vec, y =dens)+
   geom_line()
-
+rweibull()
 normal <- rnorm(100000,13.1,0.5)
 normal <- exp(normal)
 normal |> 
@@ -70,7 +70,22 @@ mean(cuantias_2023$Cuantia_ajustada)
 
 # Posibles distribuciones 
 
+ExtDist::eWeibull(X = cuantias_2023$Cuantia_ajustada*1000, method="moments")
+
+install.packages("fitdistrplus")
+library(fitdistrplus)
 
 
 
+normal <- rweibull(100000, shape = 2.043287, scale = 587905.324) 
 
+
+normal |> 
+  data.frame() |> 
+  ggplot()+
+  aes(x = normal)+
+  geom_density()
+  # scale_x_continuous(limits = c(0,7000))
+
+
+sort(cuantias_2023$Cuantia_ajustada,decreasing = T)
