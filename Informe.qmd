@@ -1,9 +1,27 @@
 ---
-title: "Informe"
-format: pdf
+format: 
+  pdf:
+    fig-pos: "H"
+    tbl-cap-location: bottom
+lang: es
+echo: FALSE
+message: FALSE
+warning: FALSE
+geometry:
+  - top= 25mm
+  - left= 20mm
+  - right = 20mm
+  - bottom = 25mm
+  - heightrounded
+header-includes:
+  - \usepackage{ragged2e}
+  - \usepackage{hyperref}
+  - \usepackage{float}
+  - \floatplacement{table}{H}
 ---
 
-```{r}
+
+```{r Carga de librerias y funciones}
 library(readxl)
 library(tidyr)
 library(dplyr)
@@ -11,8 +29,69 @@ library(ggplot2)
 library(lubridate)
 library(Pareto)
 library(stringr)
+```
+
+```{r Configuraciones predeterminadas}
+knitr::opts_chunk$set(fig.align = "center", out.width = "70%")
+
+set.seed("2126519")
+
+theme_set(theme_bw())
 
 options(scipen = 999)
+```
+
+::: {.center data-latex=""}
+
+\vspace{3cm}
+
+```{r logo facultad, echo=F, include = T, out.width= "60%"}
+knitr::include_graphics("logounr.png")
+```
+
+\pagenumbering{gobble}
+
+\vspace{5cm}
+
+\Large
+**LICENCIATURA EN ESTADÍSTICA**
+
+\vspace{1cm}
+
+\Large
+**Cálculo de prima comercial**
+
+
+\vspace{0.3cm}
+\large
+
+*"Subtitulazo"*
+
+\vspace{9cm}
+
+\large
+
+**Autores: Nicolas Gamboa - Andrés Roncaglia**
+
+**Docente: Adrián Wibly**
+
+**2024**
+\normalsize
+\newpage
+\hypersetup{linkcolor = black}
+\tableofcontents
+
+
+\newpage
+\pagenumbering{arabic}
+
+:::
+
+\newpage
+
+# Introducción
+
+```{r Config}
 cuantias_2023 <- read_excel("Datos/Datos.xlsx") |> 
   mutate(Cuantia_ajustada = Cuantia_ajustada/1000)
 
@@ -39,17 +118,39 @@ knitr::kable(Registro)
 
 ```
 
+# Distribuciones para el numero de siniestros por poliza
+
+## Poisson
+
+Tomamos como parametro lambda la media de lambda en los años anteriores
+
+```{r}
+
+media_lambda <- mean(Registro$SinXpoliza)
+
+dist_pois <- data.frame(n = 0:3,
+                        prob = dpois(0:3, lambda = media_lambda))
+
+dist_pois |> 
+  ggplot() + 
+  aes(x = n, y = 0, yend =  prob) +
+  geom_segment()+
+  geom_point(aes(y = prob))
+  
+
+```
+
 # Distribuciones para la cuantia de los siniestros
 
 ## Metodo 1: Empirica + Pareto I (acotada hasta 10k) 
 
 ```{r}
 ## Punto de corte
-
-XL <- as.numeric(quantile(x = cuantias_2023$Cuantia_ajustada,prob = 0.95))
+q <- 0.995
+XL <- as.numeric(quantile(x = cuantias_2023$Cuantia_ajustada,prob = q))
 cuantias_2023 <- cuantias_2023 |> 
-  mutate(Marginal = ifelse(Cuantia_ajustada < quantile(x = Cuantia_ajustada,prob = 0.95), T,F),
-         Cuanti_cat = cut(Cuantia_ajustada,breaks = c(seq(0,XL,length.out = 50))))
+  mutate(Marginal = ifelse(Cuantia_ajustada < quantile(x = Cuantia_ajustada,prob = q), T,F),
+         Cuanti_cat = cut(Cuantia_ajustada,breaks = c(seq(0,XL,length.out = 100))))
 
 ## Distribucion hasta el punto de corte
 
@@ -78,18 +179,18 @@ mu_2 <- mean(cuantias_2023$Cuantia_ajustada[!cuantias_2023$Marginal])
 
 ## Funcion para sacar muestra de la distribucion conjunta Empirica-Pareto
 
-Sacar_muestra <- function(n, Marginal, XL, mu_2){
+Sacar_muestra_ep <- function(n, Marginal, XL, mu_2){
   
   # Parametros para pareto 1 
-  beta <- mu_2/(mu_2-0.05*XL)
-  alpha <- XL * 0.05^(1/beta)
+  beta <- mu_2/(mu_2-(1-q)*XL)
+  alpha <- XL * (1-q)^(1/beta)
   
   # Vector de salida
   Salida <- numeric(n)
   
   for (i in 1:n) {
     Selec <- runif(1)
-    if(Selec<0.95){
+    if(Selec<q){
       # Si el valor random cae en el 95% de la distribucion selecciona un valor de la distribucion empirica mediante el metodo de la grilla
       
       Inversa <- runif(1)
@@ -117,14 +218,14 @@ Sacar_muestra <- function(n, Marginal, XL, mu_2){
 
 ## Obtencion y grafico de la muestra
 
-Muestra_cuantia <- Sacar_muestra(n = 10000,Marginal = Marginal, XL = XL,mu_2 = mu_2)
+Muestra_cuantia <- Sacar_muestra(n = 3000,Marginal = Marginal, XL = XL,mu_2 = mu_2)
 
 Muestra_cuantia |> 
   tibble() |> 
   # filter(Muestra_cuantia<XL) |> 
   ggplot()+
   aes(x = Muestra_cuantia)+
-  geom_density()  
+  geom_density()
 
 
 # Agragar: elegir numero random entre el intervalo seleccionado
@@ -205,31 +306,12 @@ Muestra_cuantia |>
   geom_density()
 ```
 
-# Distribuciones para el numero de siniestros por poliza
-
-## Poisson
-
-Tomamos como parametro lambda la media de lambda en los años anteriores
-
-```{r}
-
-media_lambda <- mean(Registro$SinXpoliza)
-
-dist_pois <- data.frame(n = 0:3,
-                        prob = dpois(0:3, lambda = media_lambda))
-
-dist_pois |> 
-  ggplot() + 
-  aes(x = n, y = prob) +
-  geom_col()
-
-```
 
 # Simulacion de la cartera
 
 Asumimos en 2024 hubo 25615 polizas al igual que en 2023
 
-## Weibull-pareto
+## Weibull-pareto(Truncada)
 
 ```{r}
 n_polizas <- 25615
@@ -247,11 +329,11 @@ for (i in 1:k) {
   cat("Progreso:", round(i/k*100, digits = 2), "% \n")
 }
 
-prima_pura <- mean(cuantia_total)
-
+prima_pura <- mean(cuantia_total)/n_polizas
+prima_pura_total <- mean(cuantia_total)
 cuantil_0.01 <- quantile(cuantia_total, probs = 0.99)
 
-margen_solvencia_minimo <- as.numeric(cuantil_0.01 - prima_pura)
+margen_solvencia_minimo <- as.numeric(cuantil_0.01 - prima_pura_total)
 
 hist(cuantia_total)
 ```
