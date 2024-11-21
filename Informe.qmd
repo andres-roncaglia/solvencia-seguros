@@ -29,6 +29,7 @@ library(ggplot2)
 library(lubridate)
 library(Pareto)
 library(stringr)
+library(gt)
 ```
 
 ```{r Configuraciones predeterminadas}
@@ -91,10 +92,76 @@ knitr::include_graphics("logounr.png")
 
 # Introducción
 
-```{r Config}
-cuantias_2023 <- read_excel("Datos/Datos.xlsx") |> 
-  mutate(Cuantia_ajustada = Cuantia_ajustada/1000)
+La gestión de una compañía de seguros conlleva múltiples desafíos, siendo uno de los más relevantes garantizar su estabilidad financiera a largo plazo, la cual es fundamental ya que garantiza la capacidad de cumplir con los compromisos asumidos frente a los asegurados. En un sector expuesto a incertidumbres y riesgos, contar con mecanismos que refuercen la sostenibilidad económica es esencial para proteger la confianza de los clientes y la solidez del negocio.
 
+En este informe se abordará la evaluación de los recursos financieros mínimos necesarios para garantizar que la empresa pueda afrontar sus obligaciones incluso en escenarios adversos, promoviendo así su estabilidad y responsabilidad en el sector asegurador.
+
+# Ajuste por inflación
+
+Dado que los datos se fueron obtenidos a lo largo del año 2023, el cúal presentó una inflación anual del 211.4%, fue necesario hacer un ajuste por inflación a las cuantías registradas. Para esto se utilizó el Coeficiente de Estabilización de Referencia construido por el [Banco Central de la república Argentina](https://www.bcra.gob.ar/PublicacionesEstadisticas/Principales_variables_datos.asp), teniendo en cuenta que el cambio en la inflación se calcula a 45 días de la fecha en la que se obtuvo el valor.
+
+```{r Config}
+# Fijamos la aleatorizaciónd e lso resultados
+
+set.seed(05082024)
+
+# Carga de datos
+cuantias_2023 <- read_excel("Datos/Base_datos.xlsx")
+
+#" |> mutate(Cuantia_ajustada = Cuantia_ajustada/1000)
+
+base_CER <- read_excel("Datos/Base_CER.xlsx")
+# Sumamos a cado fecha 45 días para igualar al valor real
+base_CER <- base_CER |> 
+  mutate(Fecha = as.Date(Fecha) - 45)
+
+# Ajustamos por inflación
+
+cuantias_2023 <- cuantias_2023 |>
+  left_join(base_CER, by = "Fecha")
+  
+cuantias_2023 <- cuantias_2023 |> 
+  mutate("Inflación porcentual" = round(max(Valor)/Valor*100-100,2),
+         Cuantia_ajustada = Cuantía + Cuantía*`Inflación porcentual`/100)
+
+```
+
+
+```{r}
+#| tbl-cap: "Siniestros registrados en el año 2023, con ajuste por inflación"
+
+rbind(head(cuantias_2023, 4) |> mutate(Fecha = as.character(Fecha)), 
+      c("...", "...", "...", "...", "..."), 
+      tail(cuantias_2023, 4) |> mutate(Fecha = as.character(Fecha))) |> 
+  knitr::kable(col.names = c(colnames(cuantias_2023)[-5], "Cuantía ajustada"))
+```
+
+Se decidió trabajar con la cuantía en miles, debido a los altos valores que toma, para facilitar la interpretación.
+
+```{r}
+
+# Dividimos por mil la cuantia para que sea mas facil de trabajar e interpretar
+
+cuantias_2023 <- cuantias_2023 |> mutate(Cuantia_ajustada = Cuantia_ajustada/1000)
+```
+
+
+```{r}
+#| fig-cap: "Distribución de la cuantía de siniestros ajustada por inflación en el año 2023"
+
+
+# Descriptivo
+cuantias_2023 |> 
+  ggplot()+
+  aes(x = Cuantia_ajustada)+
+  labs(y = "Densidad", x = "Cuantía del siniestro (en miles)") +
+  geom_density(fill = "skyblue2", alpha = 0.6)
+```
+
+También se cuenta con la información de la cantidad de pólizas y siniestros de años anteriores.
+
+```{r}
+# Registro de la tasa de siniestros por año
 Registro <- tibble(
   anio = c(2021,2022,2023),
   polizas = c(24725, 25348 , 25615),
@@ -105,81 +172,107 @@ Registro <- tibble(
 
 ```
 
-```{r}
-# Descriptivo
-cuantias_2023 |> 
-  ggplot()+
-  aes(x = Cuantia_ajustada)+
-  geom_density()
-```
+
 
 ```{r}
-knitr::kable(Registro)
+#| tbl-cap: "Registro de la tasa de siniestros por año"
+
+knitr::kable(Registro, col.names = c("Año", "Pólizas", "Siniestros", "Tasa Sin/Pol"))
 
 ```
 
-# Distribuciones para el numero de siniestros por poliza
+El objetivo principal es obtener el margen de solvencia mínimo que garantice con una probabilidad del 99% que la empresa de seguros será solvente durante el año 2024, en el cual se asume que se mantendrá la cantidad de pólizas del año 2023. Para cumplir tal objetivo es necesario encontrar la distribución de la cuantía total de siniestros en el año 2024:
+
+$$F(Y) = \sum ^\infty_{N=0} f(N) \cdot F^{(*)N}(Y)$$
+
+La cual depende de las funciones de distribución de la cantidad de siniestros por póliza y de la de la cuantía individual:
+
+- $f(N)$
+
+- $f(x)$
+
+Por esto es que se procede a encontrar aproximaciones de las mismas.
+
+# Distribución para el número de siniestros por póliza
 
 ## Poisson
 
-Tomamos como parametro lambda la media de lambda en los años anteriores
+$$N \sim Pois(\lambda)$$
 
 ```{r}
-
 media_lambda <- mean(Registro$SinXpoliza)
 
-dist_pois <- data.frame(n = 0:3,
-                        prob = dpois(0:3, lambda = media_lambda))
+dist_pois <- data.frame(n = 0:10,
+                        prob = dpois(0:10, lambda = media_lambda))
+```
+
+Como parámetro $\lambda$ se elige a la tasa media de siniestralidad por póliza de años anteriores, `r media_lambda`, obteniendo así la distribución para la cantidad de siniestros por póliza:
+
+```{r}
+#| fig-cap: "Distribución para la cantidad de siniestros por póliza"
 
 dist_pois |> 
   ggplot() + 
   aes(x = n, y = 0, yend =  prob) +
   geom_segment()+
-  geom_point(aes(y = prob))
+  geom_point(aes(y = prob)) +
+  geom_label(aes(x = n, y = prob+0.08, label = round(prob, 4)), fill = "lightblue1") +
+  scale_x_continuous(limits = c(0,3)) +
+  labs(y = "Probabilidad", x = "Cantidad de siniestros")
   
 
 ```
 
-# Distribuciones para la cuantia de los siniestros
+# Distribuciones para la cuantía de los siniestros
 
-## Metodo 1: Empirica + Pareto I (acotada hasta 10k) 
+Una vez encontrada la distribución para la cantidad de siniestros por póliza es necesario encontrar la distribución para la cuantía que pueden llegar a tener las pólizas. Para esta se propusieron varias alternativas.
+
+## Método 1: Empírica + Pareto I
+
+Para este primer método se decidió usar la distribución empírica hasta el cuantil $0.995$, a partir del cual se decidió obtener muestras de una distribución Pareto.
+
+Para obtener las muestras de la distribución empírica se utilizó el método de la grilla y los parámetros para la distribución pareto fueron estimados de la siguiente manera:
+
+$$\beta = \frac{\mu_2}{\mu_2-(1-q)\cdot X_l} \ \ \ \ \ \ \ \ \ \alpha = X_l \cdot (1-q)^{1/\beta}$$
+
+Donde $\mu_2$ es la media de la distribución a partir del valor $X_l$, que es el valor del cuantil $q = 0.995$.
+
+Sin embargo, dado que la distribución Pareto devolvía en ciertas ocasiones valores muy extremos, muy poco posibles en la práctica, se decidió acotar la distribución Pareto a 10 millones como máximo.
 
 ```{r}
 ## Punto de corte
 q <- 0.995
+
 XL <- as.numeric(quantile(x = cuantias_2023$Cuantia_ajustada,prob = q))
+
 cuantias_2023 <- cuantias_2023 |> 
-  mutate(Marginal = ifelse(Cuantia_ajustada < quantile(x = Cuantia_ajustada,prob = q), T,F),
+  mutate(Empirica = ifelse(Cuantia_ajustada < quantile(x = Cuantia_ajustada,prob = q), T,F),
          Cuanti_cat = cut(Cuantia_ajustada,breaks = c(seq(0,XL,length.out = 100))))
-
-## Distribucion hasta el punto de corte
-
-cuantias_2023 |> 
-  filter(Marginal) |> 
-  ggplot()+
-  aes(x = Cuantia_ajustada)+
-  geom_density()
 
 ## Intervalos para el metodo de la grilla
 
-Marginal <- table(cuantias_2023$Cuanti_cat) |> 
-  as.data.frame() |> tibble() |> na.exclude() |> 
-  mutate(prob = Freq/sum(Freq))
+Empirica <- table(cuantias_2023$Cuanti_cat) |> 
+  as.data.frame() |> 
+  tibble() |> 
+  na.exclude() |> 
+  mutate(prob = Freq/sum(Freq),
+         min_interval = as.numeric(sapply(str_split(str_remove(str_remove(Var1, "]"), "[()]"),","), `[`, 1)),
+         max_interval = as.numeric(sapply(str_split(str_remove(str_remove(Var1, "]"), "[()]"),","), `[`, 2)))
 
-Marginal$Dist <- Marginal$prob
+Empirica$Dist <- Empirica$prob
 
-for (i in 2:nrow(Marginal)) {
-  Marginal[i,4] <- Marginal[i-1,4] + Marginal[i,3]
+for (i in 2:nrow(Empirica)) {
+  Empirica$Dist[i] <- Empirica$Dist[i-1] + Empirica$prob[i]
 }
 
 ## Esperanza de la distribucion despues del punto de corte
 
-mu_2 <- mean(cuantias_2023$Cuantia_ajustada[!cuantias_2023$Marginal])
+mu_2 <- mean(cuantias_2023$Cuantia_ajustada[!cuantias_2023$Empirica])
 
 
 ## Funcion para sacar muestra de la distribucion conjunta Empirica-Pareto
 
-Sacar_muestra_ep <- function(n, Marginal, XL, mu_2){
+Sacar_muestra_ep <- function(n, Empirica, XL, mu_2){
   
   # Parametros para pareto 1 
   beta <- mu_2/(mu_2-(1-q)*XL)
@@ -194,12 +287,12 @@ Sacar_muestra_ep <- function(n, Marginal, XL, mu_2){
       # Si el valor random cae en el 95% de la distribucion selecciona un valor de la distribucion empirica mediante el metodo de la grilla
       
       Inversa <- runif(1)
-      Temp <- Marginal |> filter(Dist <= Inversa)
+      Temp <- sum(Empirica$Dist<= Inversa)
       
       # Seleccionamos un valor random entre el minimo y el maximo del intervalo
       
-      minimo <- as.numeric(str_split(str_remove(str_remove(Marginal$Var1[nrow(Temp)], "]"), "[()]"),",")[[1]][1])
-      maximo <- as.numeric(str_split(str_remove(str_remove(Marginal$Var1[nrow(Temp)], "]"), "[()]"),",")[[1]][2])
+      minimo <- Empirica$min_interval[Temp]
+      maximo <- Empirica$max_interval[Temp]
       
       Salida[i] <- runif(n = 1, min = minimo, max = maximo)
       
@@ -207,6 +300,7 @@ Sacar_muestra_ep <- function(n, Marginal, XL, mu_2){
       # Si el valor random cae en el 5% de la cola derecha selecciona un valor de la pareto 1
       
       while (Salida[i]<XL || Salida[i]>10000) {
+        
         Salida[i] <- rPareto(n = 1,t = alpha, alpha = beta)
 
       }
@@ -218,24 +312,32 @@ Sacar_muestra_ep <- function(n, Marginal, XL, mu_2){
 
 ## Obtencion y grafico de la muestra
 
-Muestra_cuantia <- Sacar_muestra(n = 3000,Marginal = Marginal, XL = XL,mu_2 = mu_2)
+Muestra_cuantia <- Sacar_muestra_ep(n = 3000,Empirica = Empirica, XL = XL,mu_2 = mu_2)
+```
+
+Mediante una simulación de 3000 muestras se obtuvo la siguiente distribución para la cuantía individual:
+
+```{r}
+#| fig-cap: "Simulación de la distribución por el método 1 de la cuantía individual."
 
 Muestra_cuantia |> 
   tibble() |> 
-  # filter(Muestra_cuantia<XL) |> 
   ggplot()+
   aes(x = Muestra_cuantia)+
-  geom_density()
-
-
-# Agragar: elegir numero random entre el intervalo seleccionado
+  geom_density(fill = "skyblue2", alpha = 0.6) +
+  labs(y = "Densidad", x = "Cuantía del siniestro (en miles)")
 
 ```
 
 ## Metodo 2: Lognormal
 
-```{r}
+El segundo método consiste en obtener muestras a partir de una distribución log-normal, cuyos parámetros fueron estimados de la siguiente forma:
 
+$$\mu = log(m_1) - 0.5 \cdot log(R) \ \ \ \ \ \ \ \ \sigma^2 = log(R)$$
+
+Donde $m_1$ es el momento de primer orden, $m_2$ el de segundo orden y $R = m_2/m_1^2$ es el coeficiente de asimetría.
+
+```{r}
 ## Calculamos los parámetros de la distribucion lognormal
 
 m1 <- mean(cuantias_2023$Cuantia_ajustada)
@@ -247,29 +349,40 @@ R <- m2/m1^2
 mu <- log(m1) - 0.5 * log(R)
 sigma2 <- log(R)
 
-## Aplicamos la transformacion lognormal
+## Obtenemos muestras de la distribución lognormal
 
-lognormal <- rlnorm(10000, meanlog = mu, sdlog = sqrt(sigma2))
+Sacar_muestra_log <- function(n) {rlnorm(n, meanlog = mu, sdlog = sqrt(sigma2))}
+
+lognormal <- Sacar_muestra_log(3000)
+```
+
+Mediante una simulación de 3000 muestras se obtuvo la siguiente distribución:
+
+```{r}
+#| fig-cap: "Simulación de la distribución por el método 2 de la cuantía individual."
 
 lognormal |> 
   data.frame() |> 
   ggplot()+
   aes(x = lognormal)+
-  geom_density()
+  geom_density(fill = "skyblue2", alpha = 0.6) +
+  labs(y = "Densidad", x = "Cuantía del siniestro (en miles)")
 
 
 ```
 
-## Metodo 3: Weibull + pareto 1
+## Metodo 3: Weibull + Pareto I
+
+Como último caso se decidió ajustar una distribución Weibull hasta el cuantil $0.995$, a partir del cual se ajustó una distribución Pareto de la misma forma que en el método 1. Los parámetros de la distribución Weibull fueron estimados automáticamente por el método de los momentos.
 
 ```{r}
 ## Funcion para sacar muestra de la distribucion conjunta Weibull-Pareto
 
 Sacar_muestra_wp <- function(n, XL, mu_2, datos){
   
-  # Parametros para pareto 1
-  beta <- mu_2/(mu_2-0.05*XL)
-  alpha <- XL * 0.05^(1/beta)
+  # Parametros para pareto 1 
+  beta <- mu_2/(mu_2-(1-q)*XL)
+  alpha <- XL * (1-q)^(1/beta)
   
   # Parametros para Weibull
   alphaw <- ExtDist::eWeibull(X = cuantias_2023$Cuantia_ajustada, method = "moments")$shape
@@ -279,13 +392,13 @@ Sacar_muestra_wp <- function(n, XL, mu_2, datos){
   
   for (i in 1:n) {
     Selec <- runif(1)
-    if(Selec<0.95){
-      # Si el valor random cae en el 95% de la distribucion selecciona un valor de la weibull
+    if(Selec<q){
+      # Si el valor random cae en el 99.5% de la distribucion selecciona un valor de la weibull
       
       Salida[i] <- rweibull(n = 1, shape = alphaw, scale = betaw)
       
     }else{
-      # Si el valor random cae en el 5% de la cola derecha selecciona un valor de la pareto 1
+      # Si el valor random cae en el 0.005% de la cola derecha selecciona un valor de la pareto 1
       
       while (Salida[i]<XL || Salida[i]>10000) {
         Salida[i] <- rPareto(n = 1,t = alpha, alpha = beta)
@@ -297,21 +410,118 @@ Sacar_muestra_wp <- function(n, XL, mu_2, datos){
   return(Salida)
 }
 
-Muestra_cuantia <- Sacar_muestra_wp(n = 10000, XL = XL,mu_2 = mu_2, datos = cuantias_2023$Cuantia_ajustada)
+Muestra_cuantia <- Sacar_muestra_wp(n = 3000, XL = XL,mu_2 = mu_2, datos = cuantias_2023$Cuantia_ajustada)
+```
+
+Mediante una simulación de 3000 muestras se obtuvo la siguiente distribución:
+
+```{r}
+#| fig-cap: "Simulación de la distribución por el método 3 de la cuantía individual."
 
 Muestra_cuantia |> 
   tibble() |> 
   ggplot() +
   aes(x = Muestra_cuantia)+
-  geom_density()
+  geom_density(fill = "skyblue2", alpha = 0.6) +
+  labs(y = "Densidad", x = "Cuantía del siniestro (en miles)")
 ```
 
 
-# Simulacion de la cartera
+# Simulación de la cartera
 
-Asumimos en 2024 hubo 25615 polizas al igual que en 2023
+Una vez obtenidas las distribución para la cantidad de siniestros por póliza y de la cuantía de las mismas se puede proceder a hacer simulaciones de la cuantía total con el fin de obtener una aproximación de la distribución de esta, para cada uno de los métodos de simulación de la cuantía individual. Se realizaron 3000 muestras en cada método.
 
-## Weibull-pareto(Truncada)
+
+
+## Método 1: Empírica + Pareto I
+
+```{r}
+n_polizas <- 25615
+k <- 1000
+
+cuantia_total <- numeric(k)
+for (i in 1:k) {
+  
+  # Obtenemos el numero total de siniestros para toda la cartera
+  siniestros <- sum(rpois(n = n_polizas, lambda = media_lambda))
+  
+  # Obtenemos un valor de la cuantia total
+  cuantia_total[i] <- sum(Sacar_muestra_ep(n = siniestros, XL = XL, mu_2 = mu_2, Empirica = Empirica))
+  
+  # cat("Progreso:", round(i/k*100, digits = 2), "% \n")
+}
+```
+
+
+```{r}
+#|fig-cap: "Distribución de la cuantía total mediante el método 1"
+
+cuantia_total |> 
+  tibble() |> 
+  ggplot() +
+  aes(x = cuantia_total/1000)+
+  geom_density(fill = "lightgreen", alpha = 0.6) +
+  labs(y = "Densidad", x = "Cuantía total (en millones)")
+```
+
+
+```{r}
+prima_pura <- mean(cuantia_total)/n_polizas
+prima_pura_total_ep <- mean(cuantia_total) # En miles
+cuantil_0.01 <- quantile(cuantia_total, probs = 0.99)
+
+margen_solvencia_minimo_ep <- as.numeric(cuantil_0.01 - prima_pura_total_ep) # En miles
+
+```
+
+Luego, dado que la media de la prima pura es `r round(prima_pura_total_ep/1000, 3)` millones, y el valor del cuantil 0.99 `r round(cuantil_0.01/1000, 3)` millones, el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es `r round(margen_solvencia_minimo_ep/1000, 3)` millones.
+
+## Método 2: Lognormal
+
+
+```{r}
+n_polizas <- 25615
+k <- 1000
+
+cuantia_total <- numeric(k)
+for (i in 1:k) {
+  
+  # Obtenemos el numero total de siniestros para toda la cartera
+  siniestros <- sum(rpois(n = n_polizas, lambda = media_lambda))
+  
+  # Obtenemos un valor de la cuantia total
+  cuantia_total[i] <- sum(Sacar_muestra_log(n = siniestros))
+  
+  # cat("Progreso:", round(i/k*100, digits = 2), "% \n")
+}
+```
+
+
+```{r}
+#|fig-cap: "Distribución de la cuantía total mediante el método 2"
+
+cuantia_total |> 
+  tibble() |> 
+  ggplot() +
+  aes(x = cuantia_total/1000)+
+  geom_density(fill = "lightgreen", alpha = 0.6) +
+  labs(y = "Densidad", x = "Cuantía total (en millones)")
+```
+
+
+```{r}
+prima_pura <- mean(cuantia_total)/n_polizas
+prima_pura_total_log <- mean(cuantia_total) # En miles
+cuantil_0.01 <- quantile(cuantia_total, probs = 0.99)
+
+margen_solvencia_minimo_log <- as.numeric(cuantil_0.01 - prima_pura_total_log) # En miles
+
+```
+
+Para este caso la media de la prima pura resulta `r round(prima_pura_total_log/1000, 3)` millones, el valor del cuantil 0.99 `r round(cuantil_0.01/1000, 3)` millones, y por lo tanto el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es `r round(margen_solvencia_minimo_log/1000, 3)` millones.
+
+## Método 3: Weibull + Pareto I
+
 
 ```{r}
 n_polizas <- 25615
@@ -326,15 +536,52 @@ for (i in 1:k) {
   # Obtenemos un valor de la cuantia total
   cuantia_total[i] <- sum(Sacar_muestra_wp(n = siniestros, XL = XL, mu_2 = mu_2, datos = cuantias_2023$Cuantia_ajustada))
   
-  cat("Progreso:", round(i/k*100, digits = 2), "% \n")
+  # cat("Progreso:", round(i/k*100, digits = 2), "% \n")
 }
+```
 
+
+```{r}
+#|fig-cap: "Distribución de la cuantía total mediante el método 3"
+
+cuantia_total |> 
+  tibble() |> 
+  ggplot() +
+  aes(x = cuantia_total/1000)+
+  geom_density(fill = "lightgreen", alpha = 0.6) +
+  labs(y = "Densidad", x = "Cuantía total (en millones)")
+```
+
+```{r}
 prima_pura <- mean(cuantia_total)/n_polizas
-prima_pura_total <- mean(cuantia_total)
+prima_pura_total_wp <- mean(cuantia_total) # En miles
 cuantil_0.01 <- quantile(cuantia_total, probs = 0.99)
 
-margen_solvencia_minimo <- as.numeric(cuantil_0.01 - prima_pura_total)
-
-hist(cuantia_total)
+margen_solvencia_minimo_wp <- as.numeric(cuantil_0.01 - prima_pura_total_wp) # En miles
 ```
+
+Si se usa el método 3 para simular la cuantía individual, la media de la prima pura equivale a `r round(prima_pura_total_wp/1000, 3)` millones, el valor del cuantil 0.99 a `r round(cuantil_0.01/1000, 3)` millones, y así el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es `r round(margen_solvencia_minimo_wp/1000, 3)` millones.
+
+# Discusión
+
+Todas las distribuciones propuestas para la simulación de la cuantía individual tienen tanto aspectos positivos como negativos. La distribución log-normal, a pesar de tener una forma muy similar a los datos observados, tiene una cola pesada por lo que los valores extremos se vuelven muy poco probables. Si bien las distribuciones que se propusieron con valores extremos distribuidos como Pareto resuelven esto, tal vez se podría explorar más el valor extremo propuesto, ya que tal vez 10 millones es demasiado. También se pudo haber elegido otro $\lambda$ para la distribución de la cantidad de siniestros por póliza.
+
+La media de la prima total y el margen de solvencia mínimo de los 3 métodos pueden ser resumidos por la siguiente tabla:
+
+```{r}
+#|tbl-cap: "Resultados para los 3 métodos"
+
+data.frame(Método = c("Empírica + Pareto I", "Log-normal", "Weibull + Pareto I"),
+           "Prima pura media" = c(prima_pura_total_ep, prima_pura_total_log, prima_pura_total_wp)/1000,
+           "Margen de solvencia mínimo" = c(margen_solvencia_minimo_ep, margen_solvencia_minimo_log, margen_solvencia_minimo_wp)/1000) |>
+  mutate_if(is.numeric, round, 3) |> 
+  gt() |> 
+  cols_label(Prima.pura.media = "Prima pura media",
+             Margen.de.solvencia.mínimo = "Margen de solvencia mínimo") |> 
+   tab_footnote(
+    footnote = "Los valores se encuentran expresados en millones de pesos."
+  )
+
+```
+
 
