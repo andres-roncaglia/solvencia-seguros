@@ -98,7 +98,7 @@ En este informe se abordará la evaluación de los recursos financieros mínimos
 
 # Ajuste por inflación
 
-Dado que los datos se fueron obtenidos a lo largo del año 2023, el cúal presentó una inflación anual del 211.4%, fue necesario hacer un ajuste por inflación a las cuantías registradas. Para esto se utilizó el Coeficiente de Estabilización de Referencia construido por el [Banco Central de la república Argentina](https://www.bcra.gob.ar/PublicacionesEstadisticas/Principales_variables_datos.asp), teniendo en cuenta que el cambio en la inflación se calcula a 45 días de la fecha en la que se obtuvo el valor.
+Dado que los datos fueron obtenidos a lo largo del año 2023, el cúal presentó una inflación anual del 211.4%, fue necesario hacer un ajuste por inflación a las cuantías registradas. Para esto se utilizó el Coeficiente de Estabilización de Referencia construido por el [Banco Central de la república Argentina](https://www.bcra.gob.ar/PublicacionesEstadisticas/Principales_variables_datos.asp), teniendo en cuenta que el cambio en la inflación se calcula a 45 días de la fecha en la que se obtuvo el valor.
 
 ```{r Config}
 # Fijamos la aleatorizaciónd e lso resultados
@@ -185,7 +185,7 @@ El objetivo principal es obtener el margen de solvencia mínimo que garantice co
 
 $$F(Y) = \sum ^\infty_{N=0} f(N) \cdot F^{(*)N}(Y)$$
 
-La cual depende de las funciones de distribución de la cantidad de siniestros por póliza y de la de la cuantía individual:
+La cual depende de las funciones de distribución de la cantidad de siniestros por póliza y de la cuantía individual:
 
 - $f(N)$
 
@@ -216,7 +216,7 @@ dist_pois |>
   aes(x = n, y = 0, yend =  prob) +
   geom_segment()+
   geom_point(aes(y = prob)) +
-  geom_label(aes(x = n, y = prob+0.08, label = round(prob, 4)), fill = "lightblue1") +
+  geom_label(aes(x = n, y = prob+0.08, label = round(prob, 4)), fill = "lightblue1", size = 3.3) +
   scale_x_continuous(limits = c(0,3)) +
   labs(y = "Probabilidad", x = "Cantidad de siniestros")
   
@@ -225,7 +225,7 @@ dist_pois |>
 
 # Distribuciones para la cuantía de los siniestros
 
-Una vez encontrada la distribución para la cantidad de siniestros por póliza es necesario encontrar la distribución para la cuantía que pueden llegar a tener las pólizas. Para esta se propusieron varias alternativas.
+Una vez encontrada la distribución para la cantidad de siniestros por póliza es necesario encontrar la distribución para la cuantía que pueden llegar a tener dichas pólizas. Para esta se propusieron varias alternativas.
 
 ## Método 1: Empírica + Pareto I
 
@@ -233,11 +233,11 @@ Para este primer método se decidió usar la distribución empírica hasta el cu
 
 Para obtener las muestras de la distribución empírica se utilizó el método de la grilla y los parámetros para la distribución pareto fueron estimados de la siguiente manera:
 
-$$\beta = \frac{\mu_2}{\mu_2-(1-q)\cdot X_l} \ \ \ \ \ \ \ \ \ \alpha = X_l \cdot (1-q)^{1/\beta}$$
+$$\hat\beta = \frac{\mu_2}{\mu_2-(1-q)\cdot X_l} \ \ \ \ \ \ \ \ \ \hat\alpha = X_l \cdot (1-q)^{1/\beta}$$
 
 Donde $\mu_2$ es la media de la distribución a partir del valor $X_l$, que es el valor del cuantil $q = 0.995$.
 
-Sin embargo, dado que la distribución Pareto devolvía en ciertas ocasiones valores muy extremos, muy poco posibles en la práctica, se decidió acotar la distribución Pareto a 10 millones como máximo.
+Sin embargo, dado que la distribución Pareto devolvía en ciertas ocasiones valores muy extremos, poco probables en la práctica, se decidió acotar la distribución Pareto a 10 millones como máximo.
 
 ```{r}
 ## Punto de corte
@@ -333,7 +333,7 @@ Muestra_cuantia |>
 
 El segundo método consiste en obtener muestras a partir de una distribución log-normal, cuyos parámetros fueron estimados de la siguiente forma:
 
-$$\mu = log(m_1) - 0.5 \cdot log(R) \ \ \ \ \ \ \ \ \sigma^2 = log(R)$$
+$$\hat\mu = log(m_1) - 0.5 \cdot log(R) \ \ \ \ \ \ \ \ \hat\sigma^2 = log(R)$$
 
 Donde $m_1$ es el momento de primer orden, $m_2$ el de segundo orden y $R = m_2/m_1^2$ es el coeficiente de asimetría.
 
@@ -429,7 +429,7 @@ Muestra_cuantia |>
 
 # Simulación de la cartera
 
-Una vez obtenidas las distribución para la cantidad de siniestros por póliza y de la cuantía de las mismas se puede proceder a hacer simulaciones de la cuantía total con el fin de obtener una aproximación de la distribución de esta, para cada uno de los métodos de simulación de la cuantía individual. Se realizaron 3000 muestras en cada método.
+Una vez obtenidas las distribuciones para la cantidad de siniestros por póliza y de la cuantía de las mismas se puede proceder a hacer simulaciones de la cuantía total con el fin de obtener una aproximación de la distribución de esta, para cada uno de los métodos de simulación de la cuantía individual. Se realizaron 1000 muestras en cada método.
 
 
 
@@ -474,7 +474,7 @@ margen_solvencia_minimo_ep <- as.numeric(cuantil_0.01 - prima_pura_total_ep) # E
 
 ```
 
-Luego, dado que la media de la prima pura es `r round(prima_pura_total_ep/1000, 3)` millones, y el valor del cuantil 0.99 `r round(cuantil_0.01/1000, 3)` millones, el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es `r round(margen_solvencia_minimo_ep/1000, 3)` millones.
+Luego, dado que la media de la prima pura es `r round(prima_pura_total_ep/1000, 3)` millones, y el valor del cuantil 0.99 es `r round(cuantil_0.01/1000, 3)` millones, el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es de `r round(margen_solvencia_minimo_ep/1000, 3)` millones.
 
 ## Método 2: Lognormal
 
@@ -518,7 +518,7 @@ margen_solvencia_minimo_log <- as.numeric(cuantil_0.01 - prima_pura_total_log) #
 
 ```
 
-Para este caso la media de la prima pura resulta `r round(prima_pura_total_log/1000, 3)` millones, el valor del cuantil 0.99 `r round(cuantil_0.01/1000, 3)` millones, y por lo tanto el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es `r round(margen_solvencia_minimo_log/1000, 3)` millones.
+Para este caso la media de la prima pura resulta `r round(prima_pura_total_log/1000, 3)` millones, el valor del cuantil 0.99 es `r round(cuantil_0.01/1000, 3)` millones, y por lo tanto el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es de `r round(margen_solvencia_minimo_log/1000, 3)` millones.
 
 ## Método 3: Weibull + Pareto I
 
@@ -560,7 +560,7 @@ cuantil_0.01 <- quantile(cuantia_total, probs = 0.99)
 margen_solvencia_minimo_wp <- as.numeric(cuantil_0.01 - prima_pura_total_wp) # En miles
 ```
 
-Si se usa el método 3 para simular la cuantía individual, la media de la prima pura equivale a `r round(prima_pura_total_wp/1000, 3)` millones, el valor del cuantil 0.99 a `r round(cuantil_0.01/1000, 3)` millones, y así el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es `r round(margen_solvencia_minimo_wp/1000, 3)` millones.
+Si se usa el método 3 para simular la cuantía individual, la media de la prima pura equivale a `r round(prima_pura_total_wp/1000, 3)` millones, el valor del cuantil 0.99 a `r round(cuantil_0.01/1000, 3)` millones, y así el margen de solvencia mínimo que se necesitaría para garantizar una probabilidad de solvencia del 99% es de `r round(margen_solvencia_minimo_wp/1000, 3)` millones.
 
 # Discusión
 
@@ -585,3 +585,4 @@ data.frame(Método = c("Empírica + Pareto I", "Log-normal", "Weibull + Pareto I
 ```
 
 
+Los cálculos y datos utilizados pueden ser consultados en el [repositorio del trabajo](https://github.com/andres-roncaglia/solvencia-seguros).
