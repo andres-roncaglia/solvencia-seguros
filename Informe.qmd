@@ -30,6 +30,7 @@ library(lubridate)
 library(Pareto)
 library(stringr)
 library(gt)
+library(ggridges)
 ```
 
 ```{r Configuraciones predeterminadas}
@@ -60,13 +61,13 @@ knitr::include_graphics("logounr.png")
 \vspace{1cm}
 
 \Large
-**Cálculo de prima comercial**
+**Cálculo de prima pura**
 
 
 \vspace{0.3cm}
 \large
 
-*"Subtitulazo"*
+*Estadística Actuarial*
 
 \vspace{9cm}
 
@@ -223,6 +224,35 @@ dist_pois |>
 
 ```
 
+La distribución teniendo en cuenta que hay 25615 pólizas es la siguiente.
+
+```{r}
+
+n_polizas <- 25615
+k <- 1000
+
+siniestros <- numeric(k)
+for (i in 1:k) {
+  
+  # Obtenemos el numero total de siniestros para toda la cartera
+  siniestros[i] <- sum(rpois(n = n_polizas, lambda = media_lambda))
+  }
+
+```
+
+
+```{r}
+#| fig-cap: "Simulación de la cantidad de siniestros totales."
+
+siniestros |> 
+  tibble() |> 
+  ggplot() +
+  aes(x = siniestros) +
+  geom_histogram(fill = "skyblue2", color = "black", alpha = 0.6) +
+  labs(y = "Distribución", x = "Cantidad de siniestros")
+
+```
+
 # Distribuciones para la cuantía de los siniestros
 
 Una vez encontrada la distribución para la cantidad de siniestros por póliza es necesario encontrar la distribución para la cuantía que pueden llegar a tener dichas pólizas. Para esta se propusieron varias alternativas.
@@ -233,7 +263,7 @@ Para este primer método se decidió usar la distribución empírica hasta el cu
 
 Para obtener las muestras de la distribución empírica se utilizó el método de la grilla y los parámetros para la distribución pareto fueron estimados de la siguiente manera:
 
-$$\hat\beta = \frac{\mu_2}{\mu_2-(1-q)\cdot X_l} \ \ \ \ \ \ \ \ \ \hat\alpha = X_l \cdot (1-q)^{1/\beta}$$
+$$\hat\beta = \frac{\mu_2}{\mu_2-(1-q)\cdot X_l} = 1.0032 \ \ \ \ \ \ \ \ \ \hat\alpha = X_l \cdot (1-q)^{1/\beta} = 8.8608$$
 
 Donde $\mu_2$ es la media de la distribución a partir del valor $X_l$, que es el valor del cuantil $q = 0.995$.
 
@@ -313,6 +343,8 @@ Sacar_muestra_ep <- function(n, Empirica, XL, mu_2){
 ## Obtencion y grafico de la muestra
 
 Muestra_cuantia <- Sacar_muestra_ep(n = 3000,Empirica = Empirica, XL = XL,mu_2 = mu_2)
+
+muestra_metodo_1 <- Muestra_cuantia
 ```
 
 Mediante una simulación de 3000 muestras se obtuvo la siguiente distribución para la cuantía individual:
@@ -333,7 +365,7 @@ Muestra_cuantia |>
 
 El segundo método consiste en obtener muestras a partir de una distribución log-normal, cuyos parámetros fueron estimados de la siguiente forma:
 
-$$\hat\mu = log(m_1) - 0.5 \cdot log(R) \ \ \ \ \ \ \ \ \hat\sigma^2 = log(R)$$
+$$\hat\mu = log(m_1) - 0.5 \cdot log(R) = 6.1387 \ \ \ \ \ \ \ \ \hat\sigma^2 = log(R) = 0.2334$$
 
 Donde $m_1$ es el momento de primer orden, $m_2$ el de segundo orden y $R = m_2/m_1^2$ es el coeficiente de asimetría.
 
@@ -354,6 +386,8 @@ sigma2 <- log(R)
 Sacar_muestra_log <- function(n) {rlnorm(n, meanlog = mu, sdlog = sqrt(sigma2))}
 
 lognormal <- Sacar_muestra_log(3000)
+
+muestra_metodo_2 <- lognormal
 ```
 
 Mediante una simulación de 3000 muestras se obtuvo la siguiente distribución:
@@ -373,7 +407,9 @@ lognormal |>
 
 ## Metodo 3: Weibull + Pareto I
 
-Como último caso se decidió ajustar una distribución Weibull hasta el cuantil $0.995$, a partir del cual se ajustó una distribución Pareto de la misma forma que en el método 1. Los parámetros de la distribución Weibull fueron estimados automáticamente por el método de los momentos.
+Como último caso se decidió ajustar una distribución Weibull hasta el cuantil $0.995$, a partir del cual se ajustó una distribución Pareto de la misma forma que en el método 1. Los parámetros de la distribución Weibull ($\alpha_w$ y $\beta_w$) fueron estimados automáticamente por el método de los momentos.
+
+$$\beta_{w} = 587.9055  \ \ \ \ \ \ \ \ \alpha_{w} = 2.0433$$
 
 ```{r}
 ## Funcion para sacar muestra de la distribucion conjunta Weibull-Pareto
@@ -411,6 +447,8 @@ Sacar_muestra_wp <- function(n, XL, mu_2, datos){
 }
 
 Muestra_cuantia <- Sacar_muestra_wp(n = 3000, XL = XL,mu_2 = mu_2, datos = cuantias_2023$Cuantia_ajustada)
+
+muestra_metodo_3 <- Muestra_cuantia
 ```
 
 Mediante una simulación de 3000 muestras se obtuvo la siguiente distribución:
@@ -427,9 +465,56 @@ Muestra_cuantia |>
 ```
 
 
+```{r}
+#|fig-cap: "Comparación de las distribuciones de la cuantía individual estimadas"
+
+data.frame(cuantia_total = c(cuantias_2023$Cuantia_ajustada ,muestra_metodo_1, muestra_metodo_2, muestra_metodo_3),
+           metodo = factor(c(rep("Empírica", length(cuantias_2023$Cuantia_ajustada)) ,rep(c("Emp+Par","Lognormal","Wei+Par"), each = length(muestra_metodo_1))), levels = c("Wei+Par", "Lognormal", "Emp+Par", "Empírica"))
+           ) |> 
+  ggplot() +
+  aes(x = cuantia_total, fill = metodo, y = metodo)+
+  geom_density_ridges(alpha = 0.6) +
+  labs(y = "Método", x = "Cuantía del siniestro (en miles)") + 
+  theme(legend.position = "none")
+```
+
+```{r}
+#| tbl-cap: "Medidas resumen de las distribuciones propuestas y empirica de la cuantía individual"
+
+data.frame(cuantia_total = c(cuantias_2023$Cuantia_ajustada ,muestra_metodo_1, muestra_metodo_2, muestra_metodo_3),
+           metodo = factor(c(rep("Empírica", length(cuantias_2023$Cuantia_ajustada)) ,rep(c("Emp+Par","Lognormal","Wei+Par"), each = length(muestra_metodo_1))), levels = c("Wei+Par", "Lognormal", "Emp+Par", "Empírica"))
+           ) |> 
+  group_by(metodo) |> 
+  summarise(
+    min(cuantia_total),
+    quantile(cuantia_total, probs = 0.01),
+    quantile(cuantia_total, probs = 0.05),
+    quantile(cuantia_total, probs = 0.25),
+    quantile(cuantia_total, probs = 0.5),
+    quantile(cuantia_total, probs = 0.75),
+    quantile(cuantia_total, probs = 0.95),
+    quantile(cuantia_total, probs = 0.99),
+    max(cuantia_total)
+            ) |> 
+  `colnames<-`(c("Método", "Min.", "$P_1$" ,"$P_5$", "$P_{25}$", "$P_{50}$", "$P_{75}$", "$P_{95}$", "$P_{99}$", "Max.")) |> 
+  knitr::kable(digits = 2)
+```
+
+
+
 # Simulación de la cartera
 
 Una vez obtenidas las distribuciones para la cantidad de siniestros por póliza y de la cuantía de las mismas se puede proceder a hacer simulaciones de la cuantía total con el fin de obtener una aproximación de la distribución de esta, para cada uno de los métodos de simulación de la cuantía individual. Se realizaron 1000 muestras en cada método.
+
+- Paso 1: Se obtiene una muestra la distribución de la cantidad de siniestros para una póliza.
+
+- Paso 2: Se obtienen tantas muestras de la cuantía individual del siniestro como cantidad de siniestros obtenidos en el paso anterior.
+
+- Paso 3: Se repite este proceso tantas veces como pólizas en la cartera.
+
+- Paso 4: Se suman las cuantías simuladas, este es un valor simulado de la cuantía total.
+
+- Paso 5: Se repite el proceso anterior para obtener una muestra de la distribución de la cuantía total.
 
 
 
@@ -442,14 +527,13 @@ k <- 1000
 cuantia_total <- numeric(k)
 for (i in 1:k) {
   
-  # Obtenemos el numero total de siniestros para toda la cartera
-  siniestros <- sum(rpois(n = n_polizas, lambda = media_lambda))
-  
   # Obtenemos un valor de la cuantia total
-  cuantia_total[i] <- sum(Sacar_muestra_ep(n = siniestros, XL = XL, mu_2 = mu_2, Empirica = Empirica))
+  cuantia_total[i] <- sum(Sacar_muestra_ep(n = siniestros[i], XL = XL, mu_2 = mu_2, Empirica = Empirica))
   
   # cat("Progreso:", round(i/k*100, digits = 2), "% \n")
 }
+
+metodo_1 <- cuantia_total
 ```
 
 
@@ -486,14 +570,13 @@ k <- 1000
 cuantia_total <- numeric(k)
 for (i in 1:k) {
   
-  # Obtenemos el numero total de siniestros para toda la cartera
-  siniestros <- sum(rpois(n = n_polizas, lambda = media_lambda))
-  
   # Obtenemos un valor de la cuantia total
-  cuantia_total[i] <- sum(Sacar_muestra_log(n = siniestros))
+  cuantia_total[i] <- sum(Sacar_muestra_log(n = siniestros[i]))
   
   # cat("Progreso:", round(i/k*100, digits = 2), "% \n")
 }
+
+metodo_2 <- cuantia_total
 ```
 
 
@@ -530,14 +613,13 @@ k <- 1000
 cuantia_total <- numeric(k)
 for (i in 1:k) {
   
-  # Obtenemos el numero total de siniestros para toda la cartera
-  siniestros <- sum(rpois(n = n_polizas, lambda = media_lambda))
-  
   # Obtenemos un valor de la cuantia total
-  cuantia_total[i] <- sum(Sacar_muestra_wp(n = siniestros, XL = XL, mu_2 = mu_2, datos = cuantias_2023$Cuantia_ajustada))
+  cuantia_total[i] <- sum(Sacar_muestra_wp(n = siniestros[i], XL = XL, mu_2 = mu_2, datos = cuantias_2023$Cuantia_ajustada))
   
   # cat("Progreso:", round(i/k*100, digits = 2), "% \n")
 }
+
+metodo_3 <- cuantia_total
 ```
 
 
@@ -564,7 +646,47 @@ Si se usa el método 3 para simular la cuantía individual, la media de la prima
 
 # Discusión
 
-Todas las distribuciones propuestas para la simulación de la cuantía individual tienen tanto aspectos positivos como negativos. La distribución log-normal, a pesar de tener una forma muy similar a los datos observados, tiene una cola pesada por lo que los valores extremos se vuelven muy poco probables. Si bien las distribuciones que se propusieron con valores extremos distribuidos como Pareto resuelven esto, tal vez se podría explorar más el valor extremo propuesto, ya que tal vez 10 millones es demasiado. También se pudo haber elegido otro $\lambda$ para la distribución de la cantidad de siniestros por póliza.
+```{r}
+#|fig-cap: "Comparación de las distribuciones de la cuantía total estimadas"
+
+data.frame(cuantia_total = c(metodo_1, metodo_2, metodo_3),
+           metodo = rep(c("1","2","3"), each = length(metodo_1))) |> 
+  ggplot() +
+  aes(x = cuantia_total/1000, fill = metodo, y = metodo)+
+  geom_density_ridges(alpha = 0.6) +
+  labs(y = "Método", x = "Cuantía total (en millones)") + 
+  theme(legend.position = "none")
+```
+
+
+```{r}
+#| tbl-cap: "Medidas resumen de las distribuciones propuestas de la cuantía total (en millones)"
+
+data.frame(cuantia_total = c(metodo_1, metodo_2, metodo_3)/1000,
+           metodo = rep(c("Wei+Par", "Lognormal", "Emp+Par", "Empírica"),
+                        each = length(metodo_1), 
+                        levels = c("Wei+Par", "Lognormal", "Emp+Par", "Empírica"))) |> 
+  group_by(metodo) |> 
+  summarise(
+    min(cuantia_total),
+    quantile(cuantia_total, probs = 0.01),
+    quantile(cuantia_total, probs = 0.05),
+    quantile(cuantia_total, probs = 0.25),
+    quantile(cuantia_total, probs = 0.5),
+    quantile(cuantia_total, probs = 0.75),
+    quantile(cuantia_total, probs = 0.95),
+    quantile(cuantia_total, probs = 0.99),
+    max(cuantia_total)
+            ) |> 
+  `colnames<-`(c("Método", "Min.", "$P_1$" ,"$P_5$", "$P_{25}$", "$P_{50}$", "$P_{75}$", "$P_{95}$", "$P_{99}$", "Max.")) |> 
+  knitr::kable(digits = 2)
+```
+
+Todas las distribuciones propuestas para la simulación de la cuantía individual tienen tanto aspectos positivos como negativos.
+
+La distribución log-normal, a pesar de distribuirse de forma similar a los datos observados, posee una cola pesada por lo que los valores extremos se vuelven muy poco probables. Si bien las distribuciones que se propusieron con valores extremos distribuidos como Pareto resuelven esto, tal vez se podría explorar más el valor extremo propuesto, ya que tal vez 10 millones es demasiado. También se pudo haber elegido otro $\lambda$ para la distribución de la cantidad de siniestros por póliza.
+
+La distribución de la cuantía total simulada en base al método Weibull+Pareto parece ser el método más conservador, ya que en más del 50% de las simulaciones, la cuantía total toma un valor mayor a 1800 millones de pesos. En cambio, el método basado en la distribución empírica con una cola Pareto, es el más arriesgado, ya que poco más del 1% de los valores simulados superaron los 1800 millones. Sin embargo, el método que 
 
 La media de la prima total y el margen de solvencia mínimo de los 3 métodos pueden ser resumidos por la siguiente tabla:
 
