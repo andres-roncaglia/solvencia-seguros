@@ -652,7 +652,7 @@ Si se usa el método 3 para simular la cuantía individual, la media de la prima
 #|fig-cap: "Comparación de las distribuciones de la cuantía total estimadas"
 
 data.frame(cuantia_total = c(metodo_1, metodo_2, metodo_3),
-           metodo = rep(c("Wei+Par", "Lognormal", "Emp+Par"),
+           metodo = rep(c("Emp+Par", "Lognormal", "Wei+Par"),
                         each = length(metodo_1), 
                         levels = c("Wei+Par", "Lognormal", "Emp+Par"))) |> 
   ggplot() +
@@ -667,7 +667,7 @@ data.frame(cuantia_total = c(metodo_1, metodo_2, metodo_3),
 #| tbl-cap: "Medidas resumen de las distribuciones propuestas de la cuantía total (en millones)"
 
 data.frame(cuantia_total = c(metodo_1, metodo_2, metodo_3)/1000,
-           metodo = rep(c("Wei+Par", "Lognormal", "Emp+Par"),
+           metodo = rep(c("Emp+Par", "Lognormal", "Wei+Par"),
                         each = length(metodo_1), 
                         levels = c("Wei+Par", "Lognormal", "Emp+Par"))) |> 
   group_by(metodo) |> 
@@ -690,7 +690,7 @@ Todas las distribuciones propuestas para la simulación de la cuantía individua
 
 La distribución log-normal, a pesar de distribuirse de forma similar a los datos observados, posee una cola pesada por lo que los valores extremos se vuelven muy poco probables. Si bien las distribuciones que se propusieron con valores extremos distribuidos como Pareto resuelven esto, tal vez se podría explorar más el valor extremo propuesto, ya que tal vez 10 millones es demasiado. También se pudo haber elegido otro $\lambda$ para la distribución de la cantidad de siniestros por póliza.
 
-La distribución de la cuantía total simulada en base al método Weibull+Pareto parece ser el método más conservador, ya que en más del 50% de las simulaciones, la cuantía total toma un valor mayor a 1800 millones de pesos. En cambio, el método basado en la distribución lognormal es el más arriesgado, ya que es el método que brinda el menor margen de solvencia, a pesar de que la cuantía total del método basado en la distribución Empírica+Pareto parece tomar valores menores. Esto se debe a que el método lognormal es menos asimétrica a la derecha por no tener una cola liviana como el resto de métodos.
+La distribución de la cuantía total simulada en base al método Weibull+Pareto parece ser el método más conservador, ya que en más del 50% de las simulaciones, la cuantía total toma un valor mayor a 1800 millones de pesos. En cambio, el método basado en la distribución lognormal es el más arriesgado, ya que es el método que brinda el menor margen de solvencia, a pesar de que la cuantía total del método basado en la distribución Empírica+Pareto parece tomar valores menores. Esto se debe a que la distribución por el método lognormal es menos asimétrica a la derecha por no tener una cola liviana como el resto de métodos.
 
 \newpage
 
@@ -730,25 +730,25 @@ Pje <- c("1%",
 "2%",
 "3%")
 
-Recargada <- c(1738.017,
-1755.225,
-1772.433,
-1784.544,
-1802.213,
-1819.881,
-1838.067,
-1856.265,
-1874.464)
+Recargada <- c(prima_pura_total_ep+prima_pura_total_ep*0.01,
+prima_pura_total_ep+prima_pura_total_ep*0.02,
+prima_pura_total_ep+prima_pura_total_ep*0.03,
+prima_pura_total_log+prima_pura_total_log*0.01,
+prima_pura_total_log+prima_pura_total_log*0.02,
+prima_pura_total_log+prima_pura_total_log*0.03,
+prima_pura_total_wp+prima_pura_total_wp*0.01,
+prima_pura_total_wp+prima_pura_total_wp*0.02,
+prima_pura_total_wp+prima_pura_total_wp*0.03)/1000
 
-msm <- c(62.72191,
-45.51382,
-28.30573,
-58.89925,
-41.23050,
-23.56175,
-77.62932,
-59.43064,
-41.23196)
+msm <- c(quantile(metodo_1, probs = 0.99)/1000-Recargada[1],
+quantile(metodo_1, probs = 0.99)/1000-Recargada[2],
+quantile(metodo_1, probs = 0.99)/1000-Recargada[3],
+quantile(metodo_2, probs = 0.99)/1000-Recargada[4],
+quantile(metodo_2, probs = 0.99)/1000-Recargada[5],
+quantile(metodo_2, probs = 0.99)/1000-Recargada[6],
+quantile(metodo_3, probs = 0.99)/1000-Recargada[7],
+quantile(metodo_3, probs = 0.99)/1000-Recargada[8],
+quantile(metodo_3, probs = 0.99)/1000-Recargada[9])
 
 
 data.frame("Método" = Metodo,
