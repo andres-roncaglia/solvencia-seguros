@@ -61,7 +61,7 @@ knitr::include_graphics("logounr.png")
 \vspace{1cm}
 
 \Large
-**Cálculo de prima pura**
+**Cálculo de Margen de Solvencia Mínimo**
 
 
 \vspace{0.3cm}
@@ -768,6 +768,6 @@ data.frame("Método" = Metodo,
 
 ```
 
-Si se tuviera que recomendar un método, se considera que el más adecuado es el basado en la distribución empírica con cola Pareto, ya que el margen de solvencia mínimo obtenido es un término medio entre los 2 extremos.
+Si se tuviera que recomendar un método, se considera que el más adecuado es el basado en la distribución empírica con cola Pareto, tomando un recargo de seguridad del 2%, ya que el margen de solvencia mínimo obtenido es razonable, y disminuirlo aún más implicaría aumentar el recargo de seguridad, lo cual pareciera ser excesivo.
 
 Los cálculos y datos utilizados pueden ser consultados en el [repositorio del trabajo](https://github.com/andres-roncaglia/solvencia-seguros).
