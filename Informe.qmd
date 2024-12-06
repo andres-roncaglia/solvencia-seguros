@@ -694,21 +694,77 @@ La distribución de la cuantía total simulada en base al método Weibull+Pareto
 
 \newpage
 
-La media de la prima total y el margen de solvencia mínimo de los 3 métodos pueden ser resumidos por la siguiente tabla:
+A continuación se presentan las primas puras (PP) estimadas, los márgenes de solvencia mínimos(MSM) por sobre las primas recargadas(PPR) para cada uno de los métodos propuestos.
 
 ```{r}
 #|tbl-cap: "Resultados para los 3 métodos"
 
-data.frame(Método = c("Empírica + Pareto I", "Log-normal", "Weibull + Pareto I"),
-           "Prima pura media" = c(prima_pura_total_ep, prima_pura_total_log, prima_pura_total_wp)/1000,
-           "Margen de solvencia mínimo" = c(margen_solvencia_minimo_ep, margen_solvencia_minimo_log, margen_solvencia_minimo_wp)/1000) |>
+# data.frame("Método" = c("Empírica + Pareto I", "Log-normal", "Weibull + Pareto I"),
+#            "Prima pura media" = c(prima_pura_total_ep, prima_pura_total_log, prima_pura_total_wp)/1000,
+#            "Margen de solvencia mínimo" = c(margen_solvencia_minimo_ep, margen_solvencia_minimo_log, margen_solvencia_minimo_wp)/1000) |>
+#   mutate_if(is.numeric, round, 3) |> 
+#   gt() |> 
+#   cols_label(Prima.pura.media = "Prima pura media",
+#              Margen.de.solvencia.mínimo = "Margen de solvencia mínimo") |> 
+#    tab_footnote(
+#     footnote = "Los valores se encuentran expresados en millones de pesos."
+#   )
+
+Metodo <- c("Empírica + Pareto I",
+"Empírica + Pareto I", 
+"Empírica + Pareto I",
+"Log-normal",          
+"Log-normal",          
+"Log-normal",          
+"Weibull + Pareto I",
+"Weibull + Pareto I" , 
+"Weibull + Pareto I")
+
+Pje <- c("1%",
+"2%",
+"3%",
+"1%",
+"2%",
+"3%",
+"1%",
+"2%",
+"3%")
+
+Recargada <- c(1738.017,
+1755.225,
+1772.433,
+1784.544,
+1802.213,
+1819.881,
+1838.067,
+1856.265,
+1874.464)
+
+msm <- c(62.72191,
+45.51382,
+28.30573,
+58.89925,
+41.23050,
+23.56175,
+77.62932,
+59.43064,
+41.23196)
+
+
+data.frame("Método" = Metodo,
+           "Recargo de Seguridad" = Pje,
+           "PP" = rep(c(prima_pura_total_ep, prima_pura_total_log, prima_pura_total_wp)/1000, each = 3),
+           "PPR" = Recargada,
+           "MSM" = msm) |>
   mutate_if(is.numeric, round, 3) |> 
   gt() |> 
-  cols_label(Prima.pura.media = "Prima pura media",
-             Margen.de.solvencia.mínimo = "Margen de solvencia mínimo") |> 
+  cols_label(Recargo.de.Seguridad = "Recargo de Seguridad") |> 
    tab_footnote(
     footnote = "Los valores se encuentran expresados en millones de pesos."
   )
+
+
+
 
 ```
 
